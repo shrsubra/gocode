@@ -56,13 +56,28 @@ func (provider weatherUnderground) temperature(city string) (float64, error) {
 }
 
 func (providers multiWeatherProvider) temperature(city string) (float64, error) {
+    temps := make(chan float64, len(providers))
+    errs := make(chan error, len(providers))
+
     sum := 0.0
     for _, provider := range providers{
-        k, err := provider.temperature(city)
-        if err != nil {
+        go func(p weatherProvider) {
+            k, err := p.temperature(city)
+            if err != nil {
+                errs <- err
+                return
+            }
+            temps <- k
+        }(provider)
+    }
+
+    for i:= 0; i < len(providers); i++ {
+        select{
+        case temp := <- temps:
+            sum += temp
+        case err := <- errs:
             return 0, err
         }
-        sum += k
     }
     return sum/float64(len(providers)), nil
 }
@@ -89,23 +104,4 @@ func main() {
 
 func hello(w http.ResponseWriter, r *http.Request){
     w.Write([]byte("hello, the weather for your city is\n"))
-}
-
-func query(city string) (weatherData, error){
-    resp, err := http.Get("http://api.openweathermap.org/data/2.5/weather?APPID=242c715343d9d960a9d528222480bfbc&q=" + city)
-    if err != nil{
-        return weatherData{}, err
-    }
-    defer resp.Body.Close()
-    var d weatherData
-    if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-        return weatherData{}, err
-    }
-    return d, nil
-}
-type weatherData struct {
-    Name string `json:"name"`
-    Main struct {
-        Kelvin float64 `json:"temp"`
-    } `json:"main"`
 }
