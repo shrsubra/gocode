@@ -17,6 +17,13 @@ func main() {
     }
     for _,container := range containers{
         fmt.Printf("ID:%s\n", container.ID)
-        fmt.Printf("%+v\n", container)
+        statsC := make(chan *docker.Stats)
+        errC := make(chan error, 1)
+        go func() {
+            errC <- client.Stats(docker.StatsOptions{ID:container.ID, Stream: false, Timeout: -1, Stats: statsC})
+            close(errC)
+        }()
+        stats := <- statsC
+        fmt.Printf("%+v\n", stats)
     }
 }
